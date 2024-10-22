@@ -31,19 +31,13 @@ wget http://packages.ros.org/ros.key -O - | sudo apt-key add -
 sudo apt-get update
 sudo apt-get install python3-catkin-tools
 ```
-Necessary dependencies:
+
+### 3. Install necessary dependencies:
 ```
 sudo apt-get install ros-noetic-geographic-msgs ros-noetic-tf2-sensor-msgs ros-noetic-moveit ros-noetic-mavros ros-noetic-mavros-extras ros-noetic-mavros-msgs python3-wstool python3-catkin-tools ros-noetic-cmake-modules libyaml-cpp-dev protobuf-compiler autoconf libompl-dev ros-noetic-hector-trajectory-server ros-noetic-vrpn-client-ros ros-noetic-realsense2-camera
 
 ```
-install for other ros distros:
-```
-sudo apt-get install ros-${ROS_DISTRO}-tf2-sensor-msgs
-	instead of:
-sudo apt-get install ros-noetic-tf2-sensor-msgs
-
-```
-#### to check:
+#### to check if stuff is working:
 ```
 mkdir -p catkin_ws/src
 cd catkin_ws
@@ -51,7 +45,7 @@ catkin build
 ```
 
 
-### 3. Installing Voxblox and mav_traj_gen
+### 4. Installing Voxblox and mav_traj_gen
 * Suggestion:
 	* make directory: `$ mkdir .../catkin_ws/src/voxblox`
 	* and git clone to this `voxblox` directory now (because those are 17 ROS packages and things will get messy)
@@ -66,7 +60,7 @@ catkin build
 * [[voxblox_skeleton uint32_t - uint64_t]]
 
 
-### 4. Setting up the px4 sitl (development environment)
+### 5. Setting up the px4 sitl (development environment)
 -> Suggestion: clone the `PX4-Autopilot` into the `catkin_ws` although it is not getting build
 #### [this commands](https://docs.px4.io/main/en/dev_setup/dev_env_linux_ubuntu.html#simulation-and-nuttx-pixhawk-targets) for the px4 Simulation Environment: 
 ```
@@ -119,10 +113,10 @@ local_position:
     send_fcu: false
 ```
 
-### 5. clone [this git repo](https://github.com/JodokF/nav_stack) into the `catkin_ws/src`
+### 6. clone [this git repo](https://github.com/JodokF/nav_stack) into the `catkin_ws/src`
 * to get the 3D model in RViz change the absolute path from the `mesh filename` in `.../nav_stack/meshes/cinempc.urdf` to the path from this computer
 
-### 6. [installing QGroundControl ](https://docs.qgroundcontrol.com/master/en/qgc-user-guide/getting_started/download_and_install.html#ubuntu)
+### 7. [installing QGroundControl ](https://docs.qgroundcontrol.com/master/en/qgc-user-guide/getting_started/download_and_install.html#ubuntu)
 
 #### load QGC parameters for the Drone
 - the params are in the git-hub repo
@@ -133,14 +127,14 @@ local_position:
 				- *Tools* (right upper corner)
 					- *load from file*
 
-### 7. [[px4 test|Simulation Enviroment Test Guide]] 
+### 8. [[px4 test|Simulation Enviroment Test Guide]] 
 
-### 8. install the [ROS PID package](http://wiki.ros.org/pid#Installing_the_package)
+### 9. install the [ROS PID package](http://wiki.ros.org/pid#Installing_the_package)
 `sudo apt-get install ros-noetic-pid`
  
-### 9. [[px4 with ROS PID Cntrl with out voxblox & with mav traj. ge|Simulated Trajectory Generation Test Guide]]
+### 10. [[px4 with ROS PID Cntrl with out voxblox & with mav traj. ge|Simulated Trajectory Generation Test Guide]]
 
-### 10. Real Drone:
+### 11. Real Drone:
 #### [[mav traj. gen.,optitrack, px4|Real Trajectory Generation Test Guide - Optitrack]]
 
 #### [[mav traj. gen.,tracking cam, px4|Real Trajectory Generation Test Guide - Tracking Cam]]
