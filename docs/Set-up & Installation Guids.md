@@ -82,19 +82,19 @@ roslaunch px4 posix_sitl.launch # to test if the installation worked
 #### Adapting the `.bashrc` 
 * so that the `px4` package is found:
 * and other ros stuff ;)
-* (!) change `your_path`to the one to your `catkin_ws`
+* (!) change `your_path_to`to the one on your system (the absolute path...)
 * and change the IPs to your computer
 ```bash
 export ROS_HOSTNAME=192.168.0.29
 export ROS_IP=http://192.168.8.29
 
-source /your_path/catkin_ws/devel/setup.bash
+source /your_path_to/catkin_ws/devel/setup.bash
 
 # this has to be one line: (!)
-source /your_path/catkin_ws/src/nav_stack_cc/px4_sim/PX4-Autopilot/Tools/simulation/gazebo-classic/setup_gazebo.bash /your_path/catkin_ws/src/nav_stack_cc/px4_sim/PX4-Autopilot /your_path/catkin_ws/src/nav_stack_cc/px4_sim/PX4-Autopilot/build/px4_sitl_default
+source /your_path_to/PX4-Autopilot/Tools/simulation/gazebo-classic/setup_gazebo.bash /your_path_to/PX4-Autopilot /your_path_to/PX4-Autopilot/build/px4_sitl_default
 
-export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:/your_path/catkin_ws/src/nav_stack_cc/px4_sim/PX4-Autopilot
-export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:/your_path/catkin_ws/src/nav_stack_cc/px4_sim/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic 
+export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:/your_path_to/PX4-Autopilot
+export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:/your_path_to/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic 
 ```
 
 #### Following [[Getting ground truth from gazebo|this guide]] to get the ground truth of the drone from gazebo 
