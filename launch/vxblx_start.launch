@@ -37,7 +37,7 @@
         args="$0 0 0 0 0 0 map odom 100" />
         
   <node name="rviz" pkg="rviz" type="rviz" 
-        args="--display-config=/home/cconradi/Documents/catkin_ws/src/nav_stack_cc/nav_stack/cnfg/with_vxblx.rviz" />
+        args="--display-config=/home/cconradi/Documents/catkin_ws/src/nav_stack/cnfg/with_vxblx.rviz" />
    
 
 </launch>

@@ -31,7 +31,7 @@
       <geometry>
       	 
       	 
-      	 <mesh filename="file:///home/ia3/Documents/catkin_ws/src/nav_stack_cc/nav_stack/meshes/cinempc_DAE.dae" scale="0.001 0.001 0.001"/> 
+      	 <mesh filename="file:///home/cconradi/Documents/catkin_ws/src/nav_stack/meshes/cinempc_DAE.dae" scale="0.001 0.001 0.001"/> 
         <!-- <mesh filename="package://rotors_description/meshes/tyrion.dae" scale="1 1 1"/> <box size="0.25 0.2 0.25"/>-->
       </geometry>
     </visual>
