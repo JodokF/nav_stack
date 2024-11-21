@@ -60,7 +60,7 @@ class poly_traj_plan{
         mav_planning_msgs::PlannerService request;
 
         geometry_msgs::PoseArray vxblx_waypoints;
-        std::vector<nav_msgs::Odometry> traj_wp;
+        nav_msgs::Odometry traj_wp;
         // std::vector<geometry_msgs::Pose> trajectory;
         nav_msgs::Odometry odom_info;
         geometry_msgs::PoseStamped odom_info_geo_msg;
@@ -90,7 +90,6 @@ class poly_traj_plan{
         void planCallback(const geometry_msgs::PoseArray::ConstPtr &msg);
         void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg);
         void drawMAVTrajectoryMarkers();
-        void drawMarkerArray(std::vector<nav_msgs::Odometry> waypoints, int color, int offset);
         // double goalDistance(geometry_msgs::Pose pose, geometry_msgs::Point goal);
         // double get_yaw_from_quat(const geometry_msgs::Quaternion );
         geometry_msgs::Pose calculateMidpoint(const geometry_msgs::Pose& pose1, const geometry_msgs::Pose& pose2);
@@ -100,12 +99,13 @@ class poly_traj_plan{
     public:
         bool vxblx_active;
         poly_traj_plan(ros::NodeHandle& nh);
+                std::vector<nav_msgs::Odometry> traj_vec;
+                void drawMarkerArray(std::vector<nav_msgs::Odometry> waypoints, int color, int offset);
         mav_msgs::EigenTrajectoryPoint::Vector traj_states;
         double takeoff_altitude, sampling_interval, vel_threshold;
      //~poly_traj_plan();
         // int takeoff();
-        bool generate_voxblox_traj();
-        bool generate_hardcoded_traj();
+        bool generate_trajectory();
         int run_navigation_node();
         void send_vel_commands();
 
