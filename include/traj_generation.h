@@ -44,7 +44,7 @@
 
 
 
-class poly_traj_plan{
+class traj_planner{
     private:
 
         bool waypoints_received, odom_received, goal_recieved;
@@ -89,7 +89,7 @@ class poly_traj_plan{
         void poseCallback_geomtry_msg_pose(const geometry_msgs::PoseStamped::ConstPtr &msg);
         void planCallback(const geometry_msgs::PoseArray::ConstPtr &msg);
         void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg);
-        void drawMAVTrajectoryMarkers();
+        double get_yaw_difference(double, double);
         // double goalDistance(geometry_msgs::Pose pose, geometry_msgs::Point goal);
         // double get_yaw_from_quat(const geometry_msgs::Quaternion );
         geometry_msgs::Pose calculateMidpoint(const geometry_msgs::Pose& pose1, const geometry_msgs::Pose& pose2);
@@ -98,12 +98,12 @@ class poly_traj_plan{
 
     public:
         bool vxblx_active;
-        poly_traj_plan(ros::NodeHandle& nh);
+        traj_planner(ros::NodeHandle& nh);
                 std::vector<nav_msgs::Odometry> traj_vec;
                 void drawMarkerArray(std::vector<nav_msgs::Odometry> waypoints, int color, int offset);
         mav_msgs::EigenTrajectoryPoint::Vector traj_states;
         double takeoff_altitude, sampling_interval, vel_threshold;
-     //~poly_traj_plan();
+     //~traj_planner();
         // int takeoff();
         bool generate_trajectory();
         int run_navigation_node();

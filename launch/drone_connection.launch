@@ -3,14 +3,15 @@
 
     <!--ARGUMENTS-->
     <!-- take-off and fly to (WRT ODOM FRAME, this is the starting pose of the drone) -->
-    <arg name="x" default="-1"/>
-    <arg name="y" default="0"/>
+    <arg name="x" default="0"/>
+    <arg name="y" default="1.5"/>
     <arg name="z" default="1"/>
     <arg name="R" default="0"/>
     <arg name="P" default="0"/>
-    <arg name="Y" default="0.7854"/> <!-- 0.7854 = 45 grad = PI / 4  -->
+    <arg name="Y" default="0"/> <!-- 0.7854 = 45 grad = PI / 4  -->
 
-    <arg name="cntrl" default="false"/>
+    <arg name="use_pid" default="false"/>
+    <arg name="use_mpc" default="false"/>
     <arg name="tracking_camera" default="false"/>
     <arg name="voxblox" default="false"/>
     
@@ -25,7 +26,8 @@
       <param name="P_takeoff" value="$(arg P)" />
       <param name="Y_takeoff" value="$(arg Y)" />
 
-      <param name="use_cntrl" value="$(arg cntrl)" /> 
+      <param name="use_pid" value="$(arg use_pid)" /> 
+      <param name="use_mpc" value="$(arg use_mpc)" /> 
       <param name="tracking_camera" value="$(arg tracking_camera)" />    
       <param name="vxblx_active" value="$(arg voxblox)" /> 
 

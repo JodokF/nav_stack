@@ -25,7 +25,7 @@ class drone_connection{
         void poseCallback_geomtry_msg_pose(const geometry_msgs::PoseStamped::ConstPtr& msg);
         void vel_cmd_cb(const geometry_msgs::Twist::ConstPtr& msg);
         void pose_cmd_cb(const geometry_msgs::PoseStamped::ConstPtr& msg);
-        double calc_euc_dist(geometry_msgs::Pose pose, geometry_msgs::Pose goal);
+        // double calc_euc_dist(geometry_msgs::Pose pose, geometry_msgs::Pose goal);
         double get_yaw_difference(double from, double to);
 
         
@@ -89,12 +89,11 @@ class drone_connection{
         
         double time_last, vel_threshold_lin, vel_threshold_ang; 
         double vel_calc_x, vel_calc_y, vel_calc_z;
-        bool vel_anomalie_detected;
         int delay_cntr;
 
     public:
         geometry_msgs::PoseStamped start_pose, safety_takeoff_pose;
-        bool vel_cmd_received, pose_cmd_received, drone_pose_received, use_cntrl, tracking_camera, vxblx_active;
+        bool vel_cmd_received, pose_cmd_received, drone_pose_received, use_pid, use_mpc, tracking_camera, vel_anomalie_detected;
         void calc_cntrl_vel();
         void pub_to_ros_pid();
         void calc_error();
@@ -120,10 +119,9 @@ drone_connection::drone_connection(ros::NodeHandle& nh)
     nh.getParam("/drone_connection_node/R_takeoff", start_pose.pose.orientation.x); // saved as RPY not Quaternion
     nh.getParam("/drone_connection_node/P_takeoff", start_pose.pose.orientation.y); // saved as RPY not Quaternion
     nh.getParam("/drone_connection_node/Y_takeoff", start_pose.pose.orientation.z); // saved as RPY not Quaternion
-    nh.getParam("/drone_connection_node/use_cntrl", use_cntrl); // determine if controller should be used or not
-    nh.getParam("/drone_connection_node/tracking_camera", tracking_camera); // check if tracking camera is used
-    nh.getParam("/drone_connection_node/vxblx_active", vxblx_active);
-    
+    nh.getParam("/drone_connection_node/use_pid", use_pid); // determine if PID should be used or not
+    nh.getParam("/drone_connection_node/use_mpc", use_mpc); // determine if MPC should be used or not
+    nh.getParam("/drone_connection_node/tracking_camera", tracking_camera); // check if tracking camera is used    
 
     //Transform Startpose RPY to Quaternions:
     tf2::Quaternion quaternion;
@@ -213,10 +211,8 @@ drone_connection::drone_connection(ros::NodeHandle& nh)
     target_frame = "odom";
     source_frame = "base_link";
     
-    // vel_calc_x = 0;
-    // vel_calc_y = 0;
-    // vel_calc_z = 0;
 
+    // TODO:
     vel_threshold_lin = 5; // too high now, just for tests...       // 0.4 m/s
     vel_threshold_ang = M_PI / 3 ; //= 1.047 rad per second = 60 degree / s
 
@@ -282,7 +278,8 @@ void drone_connection::pose_cmd_cb(const geometry_msgs::PoseStamped::ConstPtr& m
 
 void drone_connection::vel_cmd_cb(const geometry_msgs::Twist::ConstPtr& msg){
     vel_cmd_in = *msg;
-    vel_cmd_send = vel_cmd_in;  // idk probably 'vel_cmd_in' could also be used without copying it to vel_cmd_send
+    // when pid or mpc is used velocity commands are calculatet seperatly!
+    if(use_pid == false && use_mpc == false) vel_cmd_send = vel_cmd_in;  // idk probably 'vel_cmd_in' could also be used without copying it to vel_cmd_send
                                 // but since it gets changed in the controller the original velocity command is preserved
     vel_cmd_received = true;
 }
@@ -306,6 +303,7 @@ void drone_connection::yaw_pid_cb(const std_msgs::Float64::ConstPtr& msg){
 
 /////////////////////////////// CALLBACKS END ///////////////////////////////
 
+// to avoid angle wrap
 double drone_connection::get_yaw_difference(double from, double to)
 {
     double difference = to - from; 
@@ -345,7 +343,7 @@ void drone_connection::calc_cntrl_vel(){
         ros_time_last = ros::Time::now();
         
         std::cout << std::fixed << std::showpoint << std::setprecision(6);
-        std::cout << "\n---\n"<< debug_cntr << ". Passed time: "<< passed_time.toSec() <<"\n";
+        std::cout << "---\n"<< debug_cntr << ". Passed time: "<< passed_time.toSec() <<"\n";
         debug_cntr++;
 
         vel_cmd_send.linear.x  = x_pid_out   / passed_time.toSec(); // using instead of passed_time the sampling_interval of the trajectory = 0.05 sec (see traj_gen_real_drone.cpp)
@@ -355,36 +353,16 @@ void drone_connection::calc_cntrl_vel(){
         
 }
 
- void drone_connection::calc_error() {
-
-    // not used right now...
-    /*
-    error_pose.position.x = pose_cmd_in.pose.position.x - curr_pose.pose.position.x;
-    error_pose.position.y = pose_cmd_in.pose.position.y - curr_pose.pose.position.y;
-    error_pose.position.z = pose_cmd_in.pose.position.z - curr_pose.pose.position.z;
-
-    error_pose.orientation.x = pose_cmd_in.pose.orientation.x - curr_pose.pose.orientation.x;
-    error_pose.orientation.y = pose_cmd_in.pose.orientation.y - curr_pose.pose.orientation.y;
-    error_pose.orientation.z = pose_cmd_in.pose.orientation.z - curr_pose.pose.orientation.z;
-    error_pose.orientation.w = pose_cmd_in.pose.orientation.w - curr_pose.pose.orientation.w; 
-    */
-    
-
-    // to record rosbag from error
-    error_pub.publish(error_pose);
-
-
- }
  
  void drone_connection::send_vel_cmds_to_drone(){
-
-    std::cout << std::fixed << std::showpoint << std::setprecision(2);
+/*
+    std::cout << std::fixed << std::showpoint << std::setprecision(5);
     std::cout   << "Vel. send lin. & yaw: (" 
                 << vel_cmd_send.linear.x << ", "
                 << vel_cmd_send.linear.y << ", "
                 << vel_cmd_send.linear.z << ") - "
                 << vel_cmd_send.angular.z;
-    
+*/   
 
     // if the calculatet velocity is under the vel_threshold -> publish it
     // if not -> change all velocities to zero and publish it
@@ -415,13 +393,15 @@ void drone_connection::calc_cntrl_vel(){
     cmd_vel_unstmpd_pub.publish(vel_cmd_send);
 
 }
-
+/*
 double drone_connection::calc_euc_dist(geometry_msgs::Pose pose, geometry_msgs::Pose goal){
     double x_diff = goal.position.x - pose.position.x, y_diff = goal.position.y - pose.position.y, z_diff = goal.position.z - pose.position.z;
     double euc_dis = sqrt(x_diff*x_diff+y_diff*y_diff+z_diff*z_diff);
     return euc_dis;
 }
+*/
 
+// establish connection to the drone, make a take-off and wait for next drone commands
 int drone_connection::establish_connection_and_take_off()
 {
     //the setpoint publishing rate MUST be faster than 2Hz
@@ -434,14 +414,14 @@ int drone_connection::establish_connection_and_take_off()
     }
 
     if(drone_pose_received == true){
-        safety_takeoff_pose = curr_pose;
+        safety_takeoff_pose = curr_pose; // to take-off with drones current pose and only change altitude 
         safety_takeoff_pose.pose.position.z = 1.2;
     }
 
     // Set the frame in which the velocties are interpreted by the drone
-    //!!!-----------------------------------------------------------------------
+    //-----------------------------------------------------------------------
     set_frame_msg.request.mav_frame = set_frame_msg.request.FRAME_LOCAL_NED; //| FRAME_LOCAL_NED = world, FRAME_BODY_NED = drone
-    //!!!-----------------------------------------------------------------------
+    //-----------------------------------------------------------------------
     
     offb_set_mode.request.custom_mode = "OFFBOARD";
     arm_cmd.request.value = true;
@@ -488,41 +468,34 @@ int drone_connection::establish_connection_and_take_off()
             }
         }
 
-        
-        if(vxblx_active == true){
+        // The drone first performes a take-off at it's current x & y posistion to the safety-takeoff-pose
+        // When the z-hight is reached the drone flies to start_pose 
+        // and waits the until a trejectory publisher is detected
+
+        if(curr_pose.pose.position.z < safety_takeoff_pose.pose.position.z && safety_takeoff_hight_reached == false) {
             pose_pub.publish(safety_takeoff_pose);
         }
-        else{
-            if(curr_pose.pose.position.z < safety_takeoff_pose.pose.position.z && safety_takeoff_hight_reached == false) {
-                pose_pub.publish(safety_takeoff_pose);
-            }
-            
-            if(curr_pose.pose.position.z > safety_takeoff_pose.pose.position.z - 0.1 && safety_takeoff_hight_reached == false) {
-                //if (delay_cntr == 100){
-                    safety_takeoff_hight_reached = true;
-                    ROS_INFO("Safety takeoff hight reached.");
-                //}
-                //delay_cntr++;
-            }
-
-            if(safety_takeoff_hight_reached == true) {
-                pose_pub.publish(start_pose);
-            }
-        }
         
-        if(vel_cmd_sub.getNumPublishers() > 0 && vel_cmd_received == true){
-            ROS_INFO("Trajectory velocity publisher detected.");
-            return 0;
+        if(curr_pose.pose.position.z > safety_takeoff_pose.pose.position.z - 0.1 && safety_takeoff_hight_reached == false) {
+                safety_takeoff_hight_reached = true;
+                ROS_INFO("Safety takeoff hight reached.");
         }
-        if(pose_cmd_sub.getNumPublishers() > 0 && pose_cmd_received == true){
-            ROS_INFO("Trajectory pose publisher detected.");
+
+        if(safety_takeoff_hight_reached == true) {
+            pose_pub.publish(start_pose);
+        }
+         
+        // traj_generation.cpp has to send pose and velocities of the trajectory...
+        if( vel_cmd_sub.getNumPublishers()  > 0 && vel_cmd_received == true &&
+            pose_cmd_sub.getNumPublishers() > 0 && pose_cmd_received == true){
+            ROS_INFO("Trajectory publisher detected.");
             return 0;
         }
         
         ros::spinOnce();
         rate20.sleep();
     }
-    return 0;
+    return 1;
 }
 
 
@@ -536,41 +509,70 @@ int main(int argc, char **argv)
 
     drone_connection drone(std::ref(node_handle));
     std::cout << "Start pose: \n" << drone.start_pose.pose;
-    std::cout << "Using controller: " << drone.use_cntrl;
+    std::cout << "Used Controller: "; 
+        if(drone.use_pid) std::cout << "PID\n";
+        else if(drone.use_mpc) std::cout << "MPC\n";
+        else std::cout << "No Controller\n";
     ros::Rate rate40(40);
 
-    drone.establish_connection_and_take_off();
+    drone.establish_connection_and_take_off(); // TODO contorll return value from function
 
     ROS_INFO("Publishing velocitiess now...");
     // check if commands are recived for flying the trajectory
-
     
     drone.ros_time_last = ros::Time::now(); 
     // if no sleep the first passed time is 0 and then division by zero -> hell
-    // if only one rate40.sleep() still division by zero, but idk why... :/
+    // if only one rate40.sleep() still division by zero, idk why... :/ with 3 it works...
     for(int i = 0; i < 3; i++) rate40.sleep();
+    
+    // using pid -> using the pose cmds to calculate the vel for the drone
+    if(drone.use_pid && !drone.use_mpc && drone.pose_cmd_received){ 
+        while(ros::ok()){     
+            ROS_INFO("Using PID, sending velocity commands...");
+            drone.pub_to_ros_pid();
+            drone.calc_cntrl_vel();
+            drone.send_vel_cmds_to_drone();
 
-    if (drone.pose_cmd_received == true || drone.vel_cmd_received == true){
-        if(drone.use_cntrl == true){ // check if controller should be used
-            while(ros::ok()){     
-                    
-                drone.pub_to_ros_pid();
-                drone.calc_cntrl_vel();
-                drone.send_vel_cmds_to_drone();
+            //ros::spinOnce();
+            rate40.sleep();
 
-                //ros::spinOnce();
-                rate40.sleep();
-
-            }
         }
-        else if(drone.use_cntrl == false){
-            while(ros::ok()){  
-                drone.send_vel_cmds_to_drone();
-                rate40.sleep();
-            }
-        }
-
     }
+    // using mpc
+    else if(drone.use_mpc && !drone.use_pid && drone.pose_cmd_received){ 
+        // while(ros::ok()){     
+        //     ROS_INFO("Using MPC, sending velocity commands...");
+        //     drone.pub_to_ros_pid();
+        //     drone.calc_cntrl_vel();
+        //     drone.send_vel_cmds_to_drone();
+
+        //     //ros::spinOnce();
+        //     rate40.sleep();
+
+        // }
+        std::cout << "Foooock this shiiiiit\n\n\n\n";
+    }
+
+    // no controller -> using the vel cmds for the drone
+    else if(!drone.use_pid && !drone.use_mpc && drone.vel_cmd_received){
+        while(ros::ok()){  
+            ROS_INFO("Not using an extra contorller, sending velocity commands...\n");
+            drone.send_vel_cmds_to_drone();
+            rate40.sleep();
+        }
+    }
+
+    // no valid drone cmds
+    else {
+        ROS_ERROR("No valid drone commands recived! Sending velocity zeroooo\n");
+        while(ros::ok()){  
+            drone.vel_anomalie_detected = true;
+            drone.send_vel_cmds_to_drone();
+            rate40.sleep();
+        }
+    }
+
+    
 
     return 0;
 }

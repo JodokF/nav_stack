@@ -2,7 +2,7 @@
 
 /******************** Constructors ******************/
 
-poly_traj_plan::poly_traj_plan(ros::NodeHandle& nh)
+traj_planner::traj_planner(ros::NodeHandle& nh)
                 : tf_listener(tf_buffer, nh) 
 {    
 
@@ -29,13 +29,13 @@ poly_traj_plan::poly_traj_plan(ros::NodeHandle& nh)
     marker_pub = nh.advertise<visualization_msgs::MarkerArray>
                 ("/waypoint_markers", 10);
     pose_sub_geomtry_msg_pose = nh.subscribe<geometry_msgs::PoseStamped>
-                ("/optitrack/pose",10,&poly_traj_plan::poseCallback_geomtry_msg_pose,this);
+                ("/optitrack/pose",10,&traj_planner::poseCallback_geomtry_msg_pose,this);
     pose_sub_nav_msg_odom = nh.subscribe<nav_msgs::Odometry>
-                ("/mavros/odometry/out",10,&poly_traj_plan::poseCallback_nav_msg_odom,this);
+                ("/mavros/odometry/out",10,&traj_planner::poseCallback_nav_msg_odom,this);
     goal_sub = nh.subscribe<geometry_msgs::PoseStamped>
-                (goal_topic,10,&poly_traj_plan::goalCallback,this);
+                (goal_topic,10,&traj_planner::goalCallback,this);
     plan_sub = nh.subscribe<geometry_msgs::PoseArray>
-                ("/waypoint_list",10,&poly_traj_plan::planCallback,this);
+                ("/waypoint_list",10,&traj_planner::planCallback,this);
     path_plan_client = nh.serviceClient<std_srvs::Empty>
                 ("/voxblox_rrt_planner/publish_path");
     // motor_enable_service = nh.serviceClient<hector_uav_msgs::EnableMotors>
@@ -44,18 +44,7 @@ poly_traj_plan::poly_traj_plan(ros::NodeHandle& nh)
     waypoints_received = false;
     odom_received = false;
     planner_service_called = false;
-
-    if(vxblx_active == true) goal_recieved = false;
-
-    else if (vxblx_active == false){
-        // for the hard coded trajectory: (when no optitrack goal is detected)
-        altitude_factor = 1.0; // to *reduce* the hight of the flying ocho -> if it is 0 flying high is between 1 and 3 m -> start & goal at 2 m
-        x_offset = 1.0; // to move the trajectory in x
-        goal.pose.position.x = 0 - x_offset; 
-        goal.pose.position.y = 0; 
-        goal.pose.position.z = 2 - altitude_factor; 
-        goal_recieved = true;
-    }
+    sampling_interval = 0.2;
 
     target_frame = "odom";
     source_frame = "base_link";
@@ -66,7 +55,7 @@ poly_traj_plan::poly_traj_plan(ros::NodeHandle& nh)
 /******************** Functions ******************/
 
 
-void poly_traj_plan::planCallback(const geometry_msgs::PoseArray::ConstPtr& msg){
+void traj_planner::planCallback(const geometry_msgs::PoseArray::ConstPtr& msg){
     
     vxblx_waypoints = *msg;
     ROS_INFO("RRT Planner waypoints received.");
@@ -74,7 +63,7 @@ void poly_traj_plan::planCallback(const geometry_msgs::PoseArray::ConstPtr& msg)
     
 }
 
-void poly_traj_plan::goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg){
+void traj_planner::goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg){
 
     goal = *msg;
     goal.pose.position.z = 1.2; // so it's not on the floor...
@@ -84,7 +73,7 @@ void poly_traj_plan::goalCallback(const geometry_msgs::PoseStamped::ConstPtr &ms
 
 }
 
-void poly_traj_plan::poseCallback_nav_msg_odom(const nav_msgs::Odometry::ConstPtr &msg){    
+void traj_planner::poseCallback_nav_msg_odom(const nav_msgs::Odometry::ConstPtr &msg){    
     
     if (tracking_camera == false){
         odom_info = *msg;
@@ -92,7 +81,7 @@ void poly_traj_plan::poseCallback_nav_msg_odom(const nav_msgs::Odometry::ConstPt
     }
 
     // The following is necessary because the tracking camera publishes only a topic in respect to the camera_odom_frame 
-    // but since this frame is at (0.16, 0, 0.205) at start up and not (0, 0, 0) we need the pose of the cam
+    // but since this frame is at (0.16, 0, 0.205) at start up and not (0, 0, 0) we need the pose of the camxera
     // in respect to the odom frame
     if(tracking_camera == true){ 
         // to evade some error msgs at the startup
@@ -116,7 +105,7 @@ void poly_traj_plan::poseCallback_nav_msg_odom(const nav_msgs::Odometry::ConstPt
     }
 }
 
-void poly_traj_plan::poseCallback_geomtry_msg_pose(const geometry_msgs::PoseStamped::ConstPtr &msg){
+void traj_planner::poseCallback_geomtry_msg_pose(const geometry_msgs::PoseStamped::ConstPtr &msg){
     
     odom_info.header = msg->header;
     odom_info.pose.pose = msg->pose;    
@@ -124,17 +113,7 @@ void poly_traj_plan::poseCallback_geomtry_msg_pose(const geometry_msgs::PoseStam
     odom_received = true;
 }
 
-geometry_msgs::Pose poly_traj_plan::calculateMidpoint(const geometry_msgs::Pose& pose1, const geometry_msgs::Pose& pose2) {
-    geometry_msgs::Pose midpoint;
-
-    midpoint.position.x = (pose1.position.x + pose2.position.x) / 2;
-    midpoint.position.y = (pose1.position.y + pose2.position.y) / 2;
-    midpoint.position.z = (pose1.position.z + pose2.position.z) / 2;
-
-    return midpoint;
-}
-
-void poly_traj_plan::drawMarkerArray(std::vector<nav_msgs::Odometry> waypoints, int color, int offset){
+void traj_planner::drawMarkerArray(std::vector<nav_msgs::Odometry> waypoints, int color, int offset){
      
     // offset -> if else markers would be on the same spot
     
@@ -168,7 +147,7 @@ void poly_traj_plan::drawMarkerArray(std::vector<nav_msgs::Odometry> waypoints, 
             marker.pose.orientation.z = 0;
             marker.pose.orientation.w = 1;
         }
-        marker.scale.x = 0.2;  // Increase the length of the arrow
+        marker.scale.x = 0.15;  // Increase the length of the arrow
         marker.scale.y = 0.01; // Increase the width of the shaft
         marker.scale.z = 0.01;  // Increase the size of the arrowhead
         marker.color.a = 1.0; // Alpha (transparency)
@@ -189,9 +168,9 @@ void poly_traj_plan::drawMarkerArray(std::vector<nav_msgs::Odometry> waypoints, 
             break;
 
         case 3:
-            marker.color.r = 0.0;
-            marker.color.g = 0.0; 
-            marker.color.b = 1.0; 
+            marker.color.r = 0.04;
+            marker.color.g = 0.24; 
+            marker.color.b = 0.898; 
             break;
         
         default:
@@ -209,7 +188,7 @@ void poly_traj_plan::drawMarkerArray(std::vector<nav_msgs::Odometry> waypoints, 
 }
 
 
-int poly_traj_plan::run_navigation_node(){
+int traj_planner::run_navigation_node(){
 
     ROS_INFO("Navigation Node Starts");
 
@@ -236,74 +215,96 @@ int poly_traj_plan::run_navigation_node(){
     return -1;
 }
 
+// to avoid angle wrap
+double traj_planner::get_yaw_difference(double from, double to)
+{
+    double difference = to - from; 
+    while (difference < -M_PI) difference += 2 * M_PI;
+    while (difference >  M_PI) difference -= 2 * M_PI;
+    return difference;
+}
 
-bool poly_traj_plan::generate_trajectory() 
+
+bool traj_planner::generate_trajectory() 
 {
     ROS_INFO("Starting trajectory generation!");
     
-    bool success = false;
     // get static odom:
     nav_msgs::Odometry odom_static; // -> to fly away from the drones current position
-    odom_static.pose.pose.position.x = odom_info.pose.pose.position.x;
-    odom_static.pose.pose.position.y = odom_info.pose.pose.position.y;
-    odom_static.pose.pose.position.z = odom_info.pose.pose.position.z;
-    odom_static.pose.pose.orientation.x = odom_info.pose.pose.orientation.x;
-    odom_static.pose.pose.orientation.y = odom_info.pose.pose.orientation.y;
-    odom_static.pose.pose.orientation.z = odom_info.pose.pose.orientation.z;
-    odom_static.pose.pose.orientation.w = odom_info.pose.pose.orientation.w;
-
-    // a=Kurve(1.5 sin(t),1.5 cos(t),0.1 t,t,-0,100)
-
+    nav_msgs::Odometry traj_wp_old; // for velocity calculation
+    odom_static = odom_info;
+    traj_wp_old = odom_info;
+    traj_wp = odom_info; 
     
-    double fac = 0.05;
+    double fac = 0.025;
     int cntr = 0;
+    double circle_radius = 1.5;
+    double slope = 0.1;
+    double yaw = 0.0;
+    double old_yaw = 0.0;
+        
 
-    while(cntr < 500)
+    // trajectory generation 
+    while(cntr < 625)
     {
+        // calculating the poses for the helix
+        traj_wp.pose.pose.position.x = circle_radius * sin(cntr * fac);
+        traj_wp.pose.pose.position.y = circle_radius * cos(cntr * fac);
+        traj_wp.pose.pose.position.z = slope * cntr * fac + odom_static.pose.pose.position.z; // odom_static; -> to fly away from the drones current hight
         
-        // odom_static; -> to fly away from the drones current position
-        traj_wp.pose.pose.position.x = 1.5 * sin(cntr * fac) + odom_static.pose.pose.position.x;
-        traj_wp.pose.pose.position.y = 1.5 * cos(cntr * fac) + odom_static.pose.pose.position.y; 
-        traj_wp.pose.pose.position.z = 0.1 * cntr * fac + odom_static.pose.pose.position.z;
-        
+        // orientation
+        yaw = atan2(-1.5 * (sin(cntr * fac)), 1.5 * cos(cntr * fac));
 
-        //Transform yaw from helix to Quaternions:
+        //Transform yaw pose for helix to quaternions:
         tf2::Quaternion quaternion;
-        quaternion.setRPY(0, 0, atan2(-1.5 * (sin(cntr * fac)), 1.5 * cos(cntr * fac)));
+        quaternion.setRPY(0, 0, yaw);
 
-        traj_wp.pose.pose.orientation.x = quaternion.getX() + odom_static.pose.pose.orientation.x;
-        traj_wp.pose.pose.orientation.y = quaternion.getY() + odom_static.pose.pose.orientation.y;
-        traj_wp.pose.pose.orientation.z = quaternion.getZ() + odom_static.pose.pose.orientation.z;
-        traj_wp.pose.pose.orientation.w = quaternion.getW() + odom_static.pose.pose.orientation.w;
+        traj_wp.pose.pose.orientation.x = quaternion.getX();
+        traj_wp.pose.pose.orientation.y = quaternion.getY();
+        traj_wp.pose.pose.orientation.z = quaternion.getZ();
+        traj_wp.pose.pose.orientation.w = quaternion.getW();
 
-        traj_vec.push_back(traj_wp);    
+        // calculating the velocity 
+        traj_wp.twist.twist.linear.x = (traj_wp.pose.pose.position.x - traj_wp_old.pose.pose.position.x) / sampling_interval;
+        traj_wp.twist.twist.linear.y = (traj_wp.pose.pose.position.y - traj_wp_old.pose.pose.position.y) / sampling_interval;
+        traj_wp.twist.twist.linear.z = (traj_wp.pose.pose.position.z - traj_wp_old.pose.pose.position.z) / sampling_interval;
+
+        // getting the yaw difference to the next pose for the velocity
+        traj_wp.twist.twist.angular.z = get_yaw_difference(old_yaw, yaw) / sampling_interval;
+
+        traj_vec.push_back(traj_wp);   
+        traj_wp_old = traj_wp;  
+        old_yaw = yaw;
         cntr++;    
     }
 
 
-
- 
-
-    drawMarkerArray(traj_vec, 2, 0);
+    drawMarkerArray(traj_vec, 3, 0);
     // drawMAVTrajectoryMarkers();
 
-
-    success = true; // for debugging
-    return success;
+    return true;
 
 }
 
-void poly_traj_plan::send_vel_commands() {
+void traj_planner::send_vel_commands() {
     
     if(curr_state + 1 <= traj_vec.size()){  // + 1 because if not it sends one 0 0 0 pose...
-        /* 
-        cmd_vel.linear.x = traj_states[curr_state].velocity_W.x();
-        cmd_vel.linear.y = traj_states[curr_state].velocity_W.y();
-        cmd_vel.linear.z = traj_states[curr_state].velocity_W.z();
-        cmd_vel.angular.x = traj_states[curr_state].angular_velocity_W.x();
-        cmd_vel.angular.y = traj_states[curr_state].angular_velocity_W.y();
-        cmd_vel.angular.z = traj_states[curr_state].angular_velocity_W.z();
+        
+        /*
+        std::cout << std::fixed << std::showpoint << std::setprecision(5);
+        std::cout   << "Vel. send lin. & yaw: (" 
+            << cmd_vel.linear.x << ", "
+            << cmd_vel.linear.y << ", "
+            << cmd_vel.linear.z << ") - "
+            << cmd_vel.angular.z << "\n";
         */
+
+        cmd_vel.linear.x = traj_vec.at(curr_state).twist.twist.linear.x;
+        cmd_vel.linear.y = traj_vec.at(curr_state).twist.twist.linear.y;
+        cmd_vel.linear.z = traj_vec.at(curr_state).twist.twist.linear.z;
+        cmd_vel.angular.x = traj_vec.at(curr_state).twist.twist.angular.x;
+        cmd_vel.angular.y = traj_vec.at(curr_state).twist.twist.angular.y;
+        cmd_vel.angular.z = traj_vec.at(curr_state).twist.twist.angular.z;
 
         cmd_pose.pose.position.x = traj_vec.at(curr_state).pose.pose.position.x;
         cmd_pose.pose.position.y = traj_vec.at(curr_state).pose.pose.position.y;
@@ -316,7 +317,7 @@ void poly_traj_plan::send_vel_commands() {
 
         // Publish the command
         pose_pub.publish(cmd_pose);
-        // vel_pub.publish(cmd_vel);
+        vel_pub.publish(cmd_vel);
 
 
     }else{
@@ -336,7 +337,7 @@ void poly_traj_plan::send_vel_commands() {
         cmd_pose.pose.orientation.w = traj_states[traj_states.size()-1].orientation_W_B.w();
 
         pose_pub.publish(cmd_pose);
-        // vel_pub.publish(cmd_vel);
+        vel_pub.publish(cmd_vel);
         
     }
         curr_state++;
@@ -352,10 +353,10 @@ int main(int argc, char** argv){
     ros::AsyncSpinner ich_spinne(1);
     ich_spinne.start();
     ros::NodeHandle node_handle("~");
-    poly_traj_plan ptp(std::ref(node_handle));
+    traj_planner trj_pln(std::ref(node_handle));
 
     // run the navigation node and get the trajectory    
-    int nav_func_checker = ptp.run_navigation_node();
+    int nav_func_checker = trj_pln.run_navigation_node();
 
     if (nav_func_checker == 0) ROS_INFO("Navigation succesfully");
     else if (nav_func_checker == -1 ){
@@ -363,12 +364,11 @@ int main(int argc, char** argv){
         return -1;
     }     
     
-    ptp.sampling_interval = 0.5;
     while(ros::ok()){
         
-        ptp.send_vel_commands();
+        trj_pln.send_vel_commands();
 
-        ros::Duration(ptp.sampling_interval).sleep();
+        ros::Duration(trj_pln.sampling_interval).sleep();
     }
     
     
