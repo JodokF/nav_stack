@@ -20,9 +20,9 @@ int main(){
     MX R = MX::eye(4);
     //MX R = 1.0;
 
-    MX opti_func;
-    MX stage_cost;
-    MX traj_error;
+    MX opti_func = MX(0);
+    MX stage_cost = MX(0);
+    MX traj_error = MX(0);
     Opti opti;
 
     // Loop to define the variables and constraints over the horizon
@@ -47,18 +47,21 @@ int main(){
         // calculating the quadratic sum of the errors or somthing like this
         // J(x) = Sum((x(k).T)*Q*x(k)+v(k)*R*v(k))
         stage_cost = mtimes(traj_error.T(), mtimes(Q, traj_error)) + mtimes(veloc.at(k).T(), mtimes(R, veloc.at(k)));
-        opti_func += stage_cost;
+        opti_func = opti_func + stage_cost;
+        std::cout << "stage_cost size: " << stage_cost.size() <<"\n";
 
         // constraints
         opti.subject_to(opti.bounded(-x_constr, x_prd.at(k), x_constr));  
         opti.subject_to(opti.bounded(-v_constr, veloc.at(k), v_constr));   
     }
 
+    std::cout << "\n***\nOptimization function size: " << opti_func.size() <<"\n";
+
     opti.minimize(opti_func);
 
     opti.solver("ipopt");
         
-    //OptiSol sol = opti.solve();
+    OptiSol sol = opti.solve();
 
 
 return 0;
