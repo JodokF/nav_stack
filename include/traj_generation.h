@@ -23,11 +23,6 @@
 #include <eigen3/Eigen/Geometry>
 #include <eigen3/Eigen/QR>
 
-#include <mav_trajectory_generation_ros/ros_visualization.h>
-#include <mav_trajectory_generation_ros/ros_conversions.h>
-#include <mav_trajectory_generation/polynomial_optimization_linear.h>
-#include <mav_trajectory_generation/trajectory_sampling.h>
-#include <mav_planning_msgs/PlannerService.h>
 
 #include <mavros_msgs/CommandBool.h>
 #include <mavros_msgs/SetMode.h>
@@ -52,12 +47,9 @@ class traj_planner{
         int nmbr_of_states, curr_state, waypoint_cntr, marker_cntr;
         
         ros::Subscriber plan_sub, pose_sub_geomtry_msg_pose, pose_sub_nav_msg_odom, goal_sub;
-        ros::Publisher vel_pub, mav_traj_markers_pub, marker_pub, pose_pub;
+        ros::Publisher vel_pub, marker_pub, pose_pub;
         std::string pose_nav_msg_odom_msg_topic, default_odom_topic, goal_topic, default_goal_topic, planner_service;
 
-        mav_trajectory_generation::Trajectory trajectory;
-        mav_trajectory_generation::Vertex::Vector vertices;
-        mav_planning_msgs::PlannerService request;
 
         geometry_msgs::PoseArray vxblx_waypoints;
         nav_msgs::Odometry traj_wp;
@@ -101,7 +93,6 @@ class traj_planner{
         traj_planner(ros::NodeHandle& nh);
                 std::vector<nav_msgs::Odometry> traj_vec;
                 void drawMarkerArray(std::vector<nav_msgs::Odometry> waypoints, int color, int offset);
-        mav_msgs::EigenTrajectoryPoint::Vector traj_states;
         double takeoff_altitude, sampling_interval, vel_threshold;
      //~traj_planner();
         // int takeoff();

@@ -24,8 +24,6 @@ traj_planner::traj_planner(ros::NodeHandle& nh)
                 ("/vel_cmd_2_drone",10);
     pose_pub = nh.advertise<geometry_msgs::PoseStamped>
                 ("/pose_cmd_2_drone", 10);
-    mav_traj_markers_pub = nh.advertise<visualization_msgs::MarkerArray>
-                ("/trajectory_markers", 0);
     marker_pub = nh.advertise<visualization_msgs::MarkerArray>
                 ("/waypoint_markers", 10);
     pose_sub_geomtry_msg_pose = nh.subscribe<geometry_msgs::PoseStamped>
@@ -328,13 +326,13 @@ void traj_planner::send_vel_commands() {
         cmd_vel.angular.y = 0.0;
         cmd_vel.angular.z = 0.0;
 
-        cmd_pose.pose.position.x = traj_states[traj_states.size()-1].position_W.x();
-        cmd_pose.pose.position.y = traj_states[traj_states.size()-1].position_W.y();
-        cmd_pose.pose.position.z = traj_states[traj_states.size()-1].position_W.z();
-        cmd_pose.pose.orientation.x = traj_states[traj_states.size()-1].orientation_W_B.x();
-        cmd_pose.pose.orientation.y = traj_states[traj_states.size()-1].orientation_W_B.y();
-        cmd_pose.pose.orientation.z = traj_states[traj_states.size()-1].orientation_W_B.z();
-        cmd_pose.pose.orientation.w = traj_states[traj_states.size()-1].orientation_W_B.w();
+        cmd_pose.pose.position.x = traj_vec.at(traj_vec.size()-1).pose.pose.position.x;
+        cmd_pose.pose.position.y = traj_vec.at(traj_vec.size()-1).pose.pose.position.y;
+        cmd_pose.pose.position.z = traj_vec.at(traj_vec.size()-1).pose.pose.position.z;
+        cmd_pose.pose.orientation.x = traj_vec.at(traj_vec.size()-1).pose.pose.orientation.x;
+        cmd_pose.pose.orientation.y = traj_vec.at(traj_vec.size()-1).pose.pose.orientation.y;
+        cmd_pose.pose.orientation.z = traj_vec.at(traj_vec.size()-1).pose.pose.orientation.z;
+        cmd_pose.pose.orientation.w = traj_vec.at(traj_vec.size()-1).pose.pose.orientation.w;
 
         pose_pub.publish(cmd_pose);
         vel_pub.publish(cmd_vel);

@@ -16,18 +16,9 @@
   <build_depend>geometry_msgs</build_depend>
   <exec_depend>geometry_msgs</exec_depend>
 
-  <depend>eigen_catkin</depend>
-  <depend>mav_msgs</depend>
-  <depend>moveit_core</depend>
-  <depend>mav_trajectory_generation</depend>
-  <depend>mav_trajectory_generation_ros</depend>
-  <depend>mav_visualization</depend>
-  <depend>mav_planning_msgs</depend>
-  <depend>eigen_checks</depend>
   <depend>roslib</depend>
   <depend>hector_uav_msgs</depend>
-  <depend>hector_moveit_actions</depend>
-    <depend>tf2</depend>
+  <depend>tf2</depend>
   <depend>tf2_ros</depend>
 
   <export>

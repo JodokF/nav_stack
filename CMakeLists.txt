@@ -1,17 +1,14 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(nav_stack)
 
-find_package(catkin REQUIRED COMPONENTS 
-    #Eigen3
-    roscpp 
-    rospy 
-    std_msgs 
-    moveit_core
-    genmsg 
-    # hector_uav_msgs
-    mav_trajectory_generation_ros 
-    mav_trajectory_generation_example   
-    
+find_package(Eigen3 REQUIRED)
+find_package(catkin REQUIRED COMPONENTS
+    roscpp
+    rospy
+    std_msgs
+    tf2
+    tf2_ros
+    nav_msgs
 )
 
 catkin_package( 
@@ -19,7 +16,6 @@ catkin_package(
                 roscpp 
                 std_msgs 
                 geometry_msgs
-                moveit_core
                 # hector_uav_msgs
                 
 )
@@ -28,10 +24,10 @@ catkin_package(
 include_directories(
     include
     ${catkin_INCLUDE_DIRS}
+    ${EIGEN3_INCLUDE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include   # Add this line to include the directory containing traj_gen.h
     # Add any other include directories here
 )
-
 
 add_executable(traj_generation src/traj_generation.cpp)
 add_dependencies(traj_generation ${catkin_EXPORTED_TARGETS})

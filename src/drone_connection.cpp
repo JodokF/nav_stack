@@ -25,7 +25,6 @@ class drone_connection{
         void poseCallback_geomtry_msg_pose(const geometry_msgs::PoseStamped::ConstPtr& msg);
         void vel_cmd_cb(const geometry_msgs::Twist::ConstPtr& msg);
         void pose_cmd_cb(const geometry_msgs::PoseStamped::ConstPtr& msg);
-        // double calc_euc_dist(geometry_msgs::Pose pose, geometry_msgs::Pose goal);
         double get_yaw_difference(double from, double to);
 
         
@@ -60,6 +59,12 @@ class drone_connection{
         double x_pid_out, y_pid_out, z_pid_out, yaw_pid_out;
 
     /**************** PID Stuff: END ****************/
+
+    /**************** MPC Stuff: ****************/
+// ...        
+
+    /**************** MPC Stuff: END ****************/
+
 
 
         ros::ServiceClient arming_client;
@@ -96,7 +101,7 @@ class drone_connection{
         bool vel_cmd_received, pose_cmd_received, drone_pose_received, use_pid, use_mpc, tracking_camera, vel_anomalie_detected;
         void calc_cntrl_vel();
         void pub_to_ros_pid();
-        void calc_error();
+        void model_predictive_control();
         void send_vel_cmds_to_drone();
         int establish_connection_and_take_off();
         int debug_cntr;
@@ -353,6 +358,13 @@ void drone_connection::calc_cntrl_vel(){
         
 }
 
+void drone_connection::model_predictive_control(){
+
+
+
+
+}
+
  
  void drone_connection::send_vel_cmds_to_drone(){
 /*
@@ -477,8 +489,8 @@ int drone_connection::establish_connection_and_take_off()
         }
         
         if(curr_pose.pose.position.z > safety_takeoff_pose.pose.position.z - 0.1 && safety_takeoff_hight_reached == false) {
-                safety_takeoff_hight_reached = true;
-                ROS_INFO("Safety takeoff hight reached.");
+            safety_takeoff_hight_reached = true;
+            ROS_INFO("Safety takeoff hight reached.");
         }
 
         if(safety_takeoff_hight_reached == true) {
@@ -540,17 +552,15 @@ int main(int argc, char **argv)
     }
     // using mpc
     else if(drone.use_mpc && !drone.use_pid && drone.pose_cmd_received){ 
-        // while(ros::ok()){     
-        //     ROS_INFO("Using MPC, sending velocity commands...");
-        //     drone.pub_to_ros_pid();
-        //     drone.calc_cntrl_vel();
-        //     drone.send_vel_cmds_to_drone();
+        while(ros::ok()){     
+            ROS_INFO("Using MPC, sending velocity commands...");
+            drone.model_predictive_control();
+            drone.send_vel_cmds_to_drone();
 
-        //     //ros::spinOnce();
-        //     rate40.sleep();
+            //ros::spinOnce();
+            rate40.sleep();
 
-        // }
-        std::cout << "Foooock this shiiiiit\n\n\n\n";
+        }
     }
 
     // no controller -> using the vel cmds for the drone
