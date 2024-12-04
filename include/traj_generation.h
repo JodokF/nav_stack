@@ -23,7 +23,6 @@
 #include <eigen3/Eigen/Geometry>
 #include <eigen3/Eigen/QR>
 
-
 #include <mavros_msgs/CommandBool.h>
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/SetMavFrame.h>
@@ -89,7 +88,7 @@ class traj_planner{
         
 
     public:
-        bool vxblx_active;
+        bool vxblx_active, use_pid, use_mpc;
         traj_planner(ros::NodeHandle& nh);
                 std::vector<nav_msgs::Odometry> traj_vec;
                 void drawMarkerArray(std::vector<nav_msgs::Odometry> waypoints, int color, int offset);

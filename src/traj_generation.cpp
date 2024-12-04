@@ -13,6 +13,8 @@ traj_planner::traj_planner(ros::NodeHandle& nh)
     nh.param("/planner_service", planner_service, std::string("/voxblox_rrt_planner/plan"));
     nh.getParam("/drone_connection_node/tracking_camera", tracking_camera); // check if tracking camera is used
     nh.getParam("/drone_connection_node/vxblx_active", vxblx_active);
+    nh.getParam("/drone_connection_node/use_pid", use_pid); // determine if PID should be used or not
+    nh.getParam("/drone_connection_node/use_mpc", use_mpc); // determine if MPC should be used or not
 
     nmbr_of_states = 0;
     curr_state = 0;
@@ -42,7 +44,12 @@ traj_planner::traj_planner(ros::NodeHandle& nh)
     waypoints_received = false;
     odom_received = false;
     planner_service_called = false;
-    sampling_interval = 0.2;
+
+    // pid -> publish in real time since drone_connection is using it 
+    if(use_pid) sampling_interval = 0.2; 
+    // mpc -> publish all "at once" since mpc needs "the whole" trajectory
+    if(use_mpc) sampling_interval = 0.01; 
+    if(!use_pid && !use_mpc) sampling_interval = 0.2;
 
     target_frame = "odom";
     source_frame = "base_link";

@@ -20,14 +20,6 @@
 class drone_connection{
 
     private:
-        void mavros_state_cb(const mavros_msgs::State::ConstPtr& msg);
-        void poseCallback_nav_msg_odom(const nav_msgs::Odometry::ConstPtr& msg);
-        void poseCallback_geomtry_msg_pose(const geometry_msgs::PoseStamped::ConstPtr& msg);
-        void vel_cmd_cb(const geometry_msgs::Twist::ConstPtr& msg);
-        void pose_cmd_cb(const geometry_msgs::PoseStamped::ConstPtr& msg);
-        double get_yaw_difference(double from, double to);
-
-        
         ros::Subscriber state_sub;
         ros::Subscriber vel_cmd_sub;
         ros::Subscriber pose_cmd_sub;
@@ -36,6 +28,13 @@ class drone_connection{
         ros::Publisher pose_pub;
         ros::Publisher error_pub;
         ros::Publisher cmd_vel_unstmpd_pub;
+
+        void mavros_state_cb(const mavros_msgs::State::ConstPtr& msg);
+        void poseCallback_nav_msg_odom(const nav_msgs::Odometry::ConstPtr& msg);
+        void poseCallback_geomtry_msg_pose(const geometry_msgs::PoseStamped::ConstPtr& msg);
+        void vel_cmd_cb(const geometry_msgs::Twist::ConstPtr& msg);
+        void pose_cmd_cb(const geometry_msgs::PoseStamped::ConstPtr& msg);
+        double get_yaw_difference(double from, double to);
 
     /**************** PID Stuff: ****************/
         
@@ -59,12 +58,6 @@ class drone_connection{
         double x_pid_out, y_pid_out, z_pid_out, yaw_pid_out;
 
     /**************** PID Stuff: END ****************/
-
-    /**************** MPC Stuff: ****************/
-// ...        
-
-    /**************** MPC Stuff: END ****************/
-
 
 
         ros::ServiceClient arming_client;
@@ -91,7 +84,6 @@ class drone_connection{
         tf2_ros::TransformListener tf_listener; 
         std::string target_frame, source_frame;
 
-        
         double time_last, vel_threshold_lin, vel_threshold_ang; 
         double vel_calc_x, vel_calc_y, vel_calc_z;
         int delay_cntr;
@@ -101,12 +93,12 @@ class drone_connection{
         bool vel_cmd_received, pose_cmd_received, drone_pose_received, use_pid, use_mpc, tracking_camera, vel_anomalie_detected;
         void calc_cntrl_vel();
         void pub_to_ros_pid();
-        void model_predictive_control();
         void send_vel_cmds_to_drone();
         int establish_connection_and_take_off();
         int debug_cntr;
         ros::Time ros_time_last, ros_time_now;
         ros::Duration passed_time;
+        
         drone_connection(ros::NodeHandle& nh);
         ~drone_connection();
 };
@@ -357,14 +349,6 @@ void drone_connection::calc_cntrl_vel(){
         vel_cmd_send.angular.z = yaw_pid_out / passed_time.toSec();
         
 }
-
-void drone_connection::model_predictive_control(){
-
-
-
-
-}
-
  
  void drone_connection::send_vel_cmds_to_drone(){
 /*
@@ -554,8 +538,9 @@ int main(int argc, char **argv)
     else if(drone.use_mpc && !drone.use_pid && drone.pose_cmd_received){ 
         while(ros::ok()){     
             ROS_INFO("Using MPC, sending velocity commands...");
-            drone.model_predictive_control();
-            drone.send_vel_cmds_to_drone();
+            // publish start commad to mpc node
+            // sleep 1 sec to keep the loop running
+            //drone.send_vel_cmds_to_drone();
 
             //ros::spinOnce();
             rate40.sleep();

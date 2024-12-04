@@ -34,13 +34,12 @@ include_directories(
 set(CasADi_LIBRARIES "/usr/local/lib/libcasadi.so")
 
 
+# for developing of the mpc i commented this for faster compiling
 add_executable(traj_generation src/traj_generation.cpp)
 add_dependencies(traj_generation ${catkin_EXPORTED_TARGETS})
 target_link_libraries(traj_generation ${catkin_LIBRARIES})# Eigen3::Eigen)
 
-
 add_executable(drone_connection src/drone_connection.cpp)
-# add_dependencies(drone_connection ${catkin_EXPORTED_TARGETS})
 target_link_libraries(drone_connection ${catkin_LIBRARIES})# Eigen3::Eigen)
 
 
