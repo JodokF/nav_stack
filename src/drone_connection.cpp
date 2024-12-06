@@ -10,6 +10,7 @@
 #include <tf/tf.h> // Include the necessary header
 #include <tf/transform_datatypes.h>
 #include "std_msgs/Float64.h"
+#include <std_msgs/Bool.h>
 
 // for the camera tf frame transformation:
 #include <tf2_ros/transform_listener.h>
@@ -25,6 +26,8 @@ class drone_connection{
         ros::Subscriber pose_cmd_sub;
         ros::Subscriber pose_sub_geomtry_msg_pose;
         ros::Subscriber pose_sub_nav_msg_odom;
+        ros::Subscriber startschuss_detector;
+
         ros::Publisher pose_pub;
         ros::Publisher error_pub;
         ros::Publisher cmd_vel_unstmpd_pub;
@@ -34,6 +37,7 @@ class drone_connection{
         void poseCallback_geomtry_msg_pose(const geometry_msgs::PoseStamped::ConstPtr& msg);
         void vel_cmd_cb(const geometry_msgs::Twist::ConstPtr& msg);
         void pose_cmd_cb(const geometry_msgs::PoseStamped::ConstPtr& msg);
+        void startschuss_cb(const std_msgs::Bool::ConstPtr& msg);
         double get_yaw_difference(double from, double to);
 
     /**************** PID Stuff: ****************/
@@ -90,7 +94,8 @@ class drone_connection{
 
     public:
         geometry_msgs::PoseStamped start_pose, safety_takeoff_pose;
-        bool vel_cmd_received, pose_cmd_received, drone_pose_received, use_pid, use_mpc, tracking_camera, vel_anomalie_detected;
+        bool vel_cmd_received, pose_cmd_received, drone_pose_received; 
+        bool use_pid, use_mpc, tracking_camera, vel_anomalie_detected, startschuss;
         void calc_cntrl_vel();
         void pub_to_ros_pid();
         void send_vel_cmds_to_drone();
@@ -143,6 +148,9 @@ drone_connection::drone_connection(ros::NodeHandle& nh)
     pose_sub_geomtry_msg_pose = nh.subscribe<geometry_msgs::PoseStamped>
         ("/optitrack/pose", 10, &drone_connection::poseCallback_geomtry_msg_pose, this);  
         // ("/mavros/vision_pose/pose", 10, &drone_connection::real_pose_cb, this);  
+        
+    startschuss_detector = nh.subscribe<std_msgs::Bool>
+        ("/startschuss", 10, &drone_connection::startschuss_cb, this);
     
     /* --- Sending CMDS to Drone --- */
 
@@ -201,6 +209,7 @@ drone_connection::drone_connection(ros::NodeHandle& nh)
     pose_cmd_received = false;
     vel_anomalie_detected = false;
     drone_pose_received = false;
+    startschuss = false;
 
     // this is necessary otherwise the calc. orientation will be n.a.n.:
     curr_pose_temp.pose.orientation.w = 1; 
@@ -262,7 +271,6 @@ void drone_connection::poseCallback_nav_msg_odom(const nav_msgs::Odometry::Const
     }
 }
 
-
 void drone_connection::poseCallback_geomtry_msg_pose(const geometry_msgs::PoseStamped::ConstPtr& msg){
     curr_pose = *msg;
     drone_pose_received = true;
@@ -295,6 +303,11 @@ void drone_connection::z_pid_cb(const std_msgs::Float64::ConstPtr& msg){
 
 void drone_connection::yaw_pid_cb(const std_msgs::Float64::ConstPtr& msg){
     yaw_pid_out = msg->data;
+}
+
+void drone_connection::startschuss_cb(const std_msgs::Bool::ConstPtr& msg) {
+    ROS_INFO("Startschuss received.");
+    startschuss = true;
 }
 
 
@@ -339,26 +352,26 @@ void drone_connection::calc_cntrl_vel(){
         passed_time = ros::Time::now() - ros_time_last; // = 0.052 sec = aprx. 20 hz
         ros_time_last = ros::Time::now();
         
-        std::cout << std::fixed << std::showpoint << std::setprecision(6);
-        std::cout << "---\n"<< debug_cntr << ". Passed time: "<< passed_time.toSec() <<"\n";
-        debug_cntr++;
+        //std::cout << std::fixed << std::showpoint << std::setprecision(6);
+        //std::cout << "---\n"<< debug_cntr << ". Passed time: "<< passed_time.toSec() <<"\n";
+        //debug_cntr++;
 
         vel_cmd_send.linear.x  = x_pid_out   / passed_time.toSec(); // using instead of passed_time the sampling_interval of the trajectory = 0.05 sec (see traj_gen_real_drone.cpp)
-        vel_cmd_send.linear.y  = y_pid_out   / passed_time.toSec(); // or using the mean of he passed_times
+        vel_cmd_send.linear.y  = y_pid_out   / passed_time.toSec(); // or using the mean of the passed_times
         vel_cmd_send.linear.z  = z_pid_out   / passed_time.toSec(); 
         vel_cmd_send.angular.z = yaw_pid_out / passed_time.toSec();
         
 }
  
  void drone_connection::send_vel_cmds_to_drone(){
-/*
+
     std::cout << std::fixed << std::showpoint << std::setprecision(5);
     std::cout   << "Vel. send lin. & yaw: (" 
                 << vel_cmd_send.linear.x << ", "
                 << vel_cmd_send.linear.y << ", "
-                << vel_cmd_send.linear.z << ") - "
+                << vel_cmd_send.linear.z << ") & "
                 << vel_cmd_send.angular.z;
-*/   
+
 
     // if the calculatet velocity is under the vel_threshold -> publish it
     // if not -> change all velocities to zero and publish it
@@ -483,8 +496,14 @@ int drone_connection::establish_connection_and_take_off()
          
         // traj_generation.cpp has to send pose and velocities of the trajectory...
         if( vel_cmd_sub.getNumPublishers()  > 0 && vel_cmd_received == true &&
-            pose_cmd_sub.getNumPublishers() > 0 && pose_cmd_received == true){
+            pose_cmd_sub.getNumPublishers() > 0 && pose_cmd_received == true &&
+            use_mpc == false){
             ROS_INFO("Trajectory publisher detected.");
+            return 0;
+        }
+        // if mpc is used it waits for it to take over the drone ctrl
+        if( use_mpc == true && startschuss == true){
+            ROS_INFO("MPC takes over...");
             return 0;
         }
         
@@ -493,6 +512,9 @@ int drone_connection::establish_connection_and_take_off()
     }
     return 1;
 }
+
+bool test;
+
 
 
 int main(int argc, char **argv)
@@ -524,7 +546,10 @@ int main(int argc, char **argv)
     // using pid -> using the pose cmds to calculate the vel for the drone
     if(drone.use_pid && !drone.use_mpc && drone.pose_cmd_received){ 
         while(ros::ok()){     
-            ROS_INFO("Using PID, sending velocity commands...");
+            
+            // ROS_INFO("Using PID, sending velocity commands...");
+            auto loop_start = std::chrono::steady_clock::now();
+
             drone.pub_to_ros_pid();
             drone.calc_cntrl_vel();
             drone.send_vel_cmds_to_drone();
@@ -532,19 +557,17 @@ int main(int argc, char **argv)
             //ros::spinOnce();
             rate40.sleep();
 
+            auto loop_end = std::chrono::steady_clock::now();
+            std::chrono::duration<double> elapsed_time = loop_end - loop_start;
+            std::cout << "\nSending velocities every: " << elapsed_time.count() << "sec. <<<\n---\n";
+
         }
     }
     // using mpc
     else if(drone.use_mpc && !drone.use_pid && drone.pose_cmd_received){ 
         while(ros::ok()){     
-            ROS_INFO("Using MPC, sending velocity commands...");
-            // publish start commad to mpc node
-            // sleep 1 sec to keep the loop running
-            //drone.send_vel_cmds_to_drone();
-
-            //ros::spinOnce();
-            rate40.sleep();
-
+            ROS_INFO("MPC is (hopefully) sending the velocity commands...");
+            ros::Duration(1).sleep();
         }
     }
 
@@ -568,6 +591,5 @@ int main(int argc, char **argv)
     }
 
     
-
     return 0;
 }

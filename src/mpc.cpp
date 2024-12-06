@@ -3,6 +3,9 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <nav_msgs/Odometry.h>
+#include <chrono>
+#include <std_msgs/Bool.h>
+
 
 // for the camera tf frame transformation:
 #include <tf2_ros/transform_listener.h>
@@ -41,12 +44,10 @@ class mpc{
         std::string target_frame, source_frame;
 
         /************************* MPC STUFF *************************/
-
-        void assign_values();
         
-        int pred_horz = 5;
+        int pred_horz;
         int mpc_iter_cntr;
-        double dt, vel_threshold_lin, vel_threshold_ang; // = sampling interval from traj_generation.cpp
+        double delta_t, vel_threshold_lin, vel_threshold_ang; // = sampling interval from traj_generation.cpp
 
         std::vector<MX> x_ref;
         std::vector<MX> x_prd;
@@ -94,10 +95,11 @@ mpc::mpc(ros::NodeHandle& nh)
 
         
         /************************* MPC STUFF *************************/
-        dt = 0.2; 
+        delta_t = 0.2; 
+        pred_horz = 5;
         x_ref_value = DM(4, 1);
         v_ref_value = DM(4, 1);
-        x_init = DM({1.0, 2.0, 3.0, 4.0});
+        x_init = DM({0.0, 0.0, 0.0, 0.0});
         x_constr = DM({10, 10, 10, 99999});
         v_constr = DM({0.5, 0.5, 0.5, 0.5});
         Q = MX::eye(4);
@@ -106,6 +108,8 @@ mpc::mpc(ros::NodeHandle& nh)
         traj_error = MX(0);
         mpc_iter_cntr = 0;
         opts["ipopt.print_level"] = 0; // Suppress Ipopt output
+        opts["print_time"] = 0;         // Suppress timing information
+        opts["ipopt.sb"] = "yes";       // Suppress IPOPT banner
 
         pose_cmd_received = false;
         drone_pose_received = false;
@@ -178,43 +182,6 @@ void mpc::vel_cmd_cb(const geometry_msgs::Twist::ConstPtr& msg){
     vel_cmd_received = true;
 }
 
-void mpc::assign_values()
-{
-    // asign init 
-    x_init(0) = curr_pose.pose.position.x;
-    x_init(1) = curr_pose.pose.position.y;
-    x_init(2) = curr_pose.pose.position.z;
-    x_init(3) = 0.0; // I'll do this yaw shit later...
-
-    // for debugging:
-    /*
-    pose_cmd_in.pose.position.x = 1.2;
-    pose_cmd_in.pose.position.y = 1;
-    pose_cmd_in.pose.position.z = 5;
-    traj_vec.push_back(pose_cmd_in);    
-    
-    pose_cmd_in.pose.position.x = 1.3;
-    pose_cmd_in.pose.position.y = 1;
-    pose_cmd_in.pose.position.z = 5;
-    traj_vec.push_back(pose_cmd_in);  
-    
-    pose_cmd_in.pose.position.x = 1.4;
-    pose_cmd_in.pose.position.y = 1;
-    pose_cmd_in.pose.position.z = 5;
-    traj_vec.push_back(pose_cmd_in);  
-    
-    pose_cmd_in.pose.position.x = 1.5;
-    pose_cmd_in.pose.position.y = 1;
-    pose_cmd_in.pose.position.z = 5;
-    traj_vec.push_back(pose_cmd_in);  
-
-    pose_cmd_in.pose.position.x = 1.6;
-    pose_cmd_in.pose.position.y = 1;
-    pose_cmd_in.pose.position.z = 5;
-    traj_vec.push_back(pose_cmd_in);  
-    */
-
-}
 
 void mpc::model_predictive_control(){
 
@@ -222,9 +189,13 @@ void mpc::model_predictive_control(){
     Opti opti; 
     opti_func = MX(0);
 
-    assign_values();
+    // asign initial position
+    x_init(0) = curr_pose.pose.position.x;
+    x_init(1) = curr_pose.pose.position.y;
+    x_init(2) = curr_pose.pose.position.z;
+    x_init(3) = 0.0; // I'll do this yaw shit later...
 
-    std::cout << "Number of recived traj. wp.: " << traj_vec.size() << " <<<\n";
+    // std::cout << "Number of recived traj. wp.: " << traj_vec.size() << " <<<\n";
     
     for (int k = 0; k < pred_horz; ++k) {
         
@@ -232,26 +203,25 @@ void mpc::model_predictive_control(){
         veloc.push_back(opti.variable(4, 1));  
         x_ref.push_back(opti.parameter(4, 1)); 
         
+        // set traejctory pose reference
         x_ref_value(0, 0) = traj_vec.at(k + mpc_iter_cntr).pose.position.x; 
         x_ref_value(1, 0) = traj_vec.at(k + mpc_iter_cntr).pose.position.y; 
         x_ref_value(2, 0) = traj_vec.at(k + mpc_iter_cntr).pose.position.z; 
         x_ref_value(3, 0) = 0; // I'll do this yaw shit later...  
-        // set traejctory pose reference
         opti.set_value(x_ref.at(k), x_ref_value); 
 
-        // uncomment later to simplify things...
-        //v_ref_value(0, 0) = vel_vec.at(k + mpc_iter_cntr).linear.x;
-        //v_ref_value(1, 0) = vel_vec.at(k + mpc_iter_cntr).linear.y;
-        //v_ref_value(2, 0) = vel_vec.at(k + mpc_iter_cntr).linear.z;
-        //v_ref_value(3, 0) = 0; // I'll do this yaw shit later...  
         // set initial guess for the velocity
-        //opti.set_initial(veloc.at(k), v_ref_value);
+        v_ref_value(0, 0) = vel_vec.at(k + mpc_iter_cntr).linear.x;
+        v_ref_value(1, 0) = vel_vec.at(k + mpc_iter_cntr).linear.y;
+        v_ref_value(2, 0) = vel_vec.at(k + mpc_iter_cntr).linear.z;
+        v_ref_value(3, 0) = 0; // I'll do this yaw shit later...  
+        opti.set_initial(veloc.at(k), v_ref_value);
 
         // Enforce initial condition
         if (k == 0) opti.subject_to(x_prd.at(k) == x_init);  
 
-        // Define the dynamics: x_{k+1} = x_k + dt * v_k
-        if (0 < k && k < pred_horz) opti.subject_to(x_prd.at(k) == x_prd.at(k - 1) + dt * veloc.at(k - 1));
+        // Define the dynamics: x_{k+1} = x_k + delta_t * v_k
+        if (0 < k && k < pred_horz) opti.subject_to(x_prd.at(k) == x_prd.at(k - 1) + delta_t * veloc.at(k - 1));
 
         traj_error = x_prd.at(k) - x_ref.at(k);
 
@@ -262,8 +232,8 @@ void mpc::model_predictive_control(){
         // std::cout << "stage_cost size: " << stage_cost.size() <<"\n";
 
         // constraints (for debugging commented)
-        //opti.subject_to(opti.bounded(-x_constr, x_prd.at(k), x_constr));  
-        //opti.subject_to(opti.bounded(-v_constr, veloc.at(k), v_constr));   
+        opti.subject_to(opti.bounded(-x_constr, x_prd.at(k), x_constr));  
+        opti.subject_to(opti.bounded(-v_constr, veloc.at(k), v_constr));   
 
     }
 
@@ -273,20 +243,18 @@ void mpc::model_predictive_control(){
         
     OptiSol sol = opti.solve();
 
-    std::cout << std::fixed << std::showpoint << std::setprecision(3);
-    std::cout << "\n---\nThis is the fucking velocity: " << sol.value(veloc.at(0));
-    std::cout << "\nThis is the fucking reference: " << sol.value(x_ref.at(0));
-    std::cout << "\nThis is the fucking position: " << sol.value(x_prd.at(0)) << "\n---\n";
+    //std::cout << std::fixed << std::showpoint << std::setprecision(3);
+    //std::cout << "\n---\nThis is the fucking velocity: " << sol.value(veloc.at(0));
+    //std::cout << "\nThis is the fucking reference: " << sol.value(x_ref.at(0));
+    //std::cout << "\nThis is the fucking position: " << sol.value(x_prd.at(0)) << "\n---\n";
 
     vel_cmd_send.linear.x = static_cast<double>(sol.value(veloc.at(0)(0, 0)));
     vel_cmd_send.linear.y = static_cast<double>(sol.value(veloc.at(0)(1, 0)));
     vel_cmd_send.linear.z = static_cast<double>(sol.value(veloc.at(0)(2, 0)));
     vel_cmd_send.angular.z = 0; // static_cast<double>(sol.value(veloc.at(0)(3, 0)));
     
-    std::cout << "\nValue send: " << vel_cmd_send << "\n---\n";
+    // std::cout << "\nValue send: " << vel_cmd_send << "\n---\n";
     
-
-
     // to cycle through the whole trajectory reference vector as the mpc continues 
     mpc_iter_cntr++;
 
@@ -298,14 +266,15 @@ void mpc::model_predictive_control(){
 }
 
  void mpc::send_vel_cmds_to_drone(){
-/*
-    std::cout << std::fixed << std::showpoint << std::setprecision(5);
+
+
+    std::cout << std::fixed << std::showpoint << std::setprecision(3);
     std::cout   << "Vel. send lin. & yaw: (" 
                 << vel_cmd_send.linear.x << ", "
                 << vel_cmd_send.linear.y << ", "
-                << vel_cmd_send.linear.z << ") - "
-                << vel_cmd_send.angular.z;
-*/   
+                << vel_cmd_send.linear.z << ") & "
+                << vel_cmd_send.angular.z ;
+
 
     // if the calculatet velocity is under the vel_threshold -> publish it
     // if not -> change all velocities to zero and publish it
@@ -343,34 +312,69 @@ int main(int argc, char **argv)
 
     ros::NodeHandle node_handle("~");
     ros::AsyncSpinner ich_spinne(1);
-    ros::Rate rate40(40);
+    ros::Rate rate20(20);
     ros::Rate rate3(3);
     ich_spinne.start();
 
     mpc mpc(std::ref(node_handle));
 
-    //mpc.pose_cmd_received = true; // for debugging
-    while(ros::ok()){
-        if (mpc.pose_cmd_received && mpc.drone_pose_received){
-            // std::cout << "Press Enter to continue..." << std::endl;
-            // std::cin.get();  // Waits for the user to press Enter
-            // std::cout << "Continuing execution..." << std::endl;
+    ros::Publisher pub_startschuss = node_handle.advertise<std_msgs::Bool>("/startschuss", 10);
+    std_msgs::Bool msg;
 
-            while(ros::ok()){  
-                    ROS_INFO("Calculating Velocities with MPC...\n");
-                    mpc.model_predictive_control();
-                    mpc.send_vel_cmds_to_drone();
-                    rate40.sleep();
-            }
+    bool print_once = false;
+    while(ros::ok() && !mpc.pose_cmd_received || !mpc.drone_pose_received){
+        rate3.sleep();
+        if(!print_once) ROS_INFO("Waiting for drone trajectory and velocity commands...\n");    
+        print_once = true;
+    }
+
+    // wait a second so that enough waypoints are recived from the trajectory (see pose_cmd_cb())
+    ros::Duration(1).sleep(); 
+
+    msg.data = true; 
+    pub_startschuss.publish(msg);
+    ROS_INFO("Startschuss send...");
+    ros::Duration(0.05).sleep(); // wait a sec for drone_connection.cpp to react...
+
+
+    double loop_duration = 0.025;  // Target loop duration (40 Hz)
+    double sleep_time = 0;
+    int mpc_cntr = 0;
+    std::chrono::_V2::steady_clock::time_point mpc_stop, loop_start, loop_end;
+
+    while (ros::ok()) {
+        loop_start = std::chrono::steady_clock::now();
+
+        // calculating the new velocities with 5 Hz
+        // since it is generated in traj_genereation.cpp with 5 Hz
+        if (mpc_cntr % 8 == 0) mpc.model_predictive_control();
+        mpc_cntr++;
+        // sending the velocities with 40 Hz 
+        // since the drone needs vel cmds with at least 20 Hz
+        mpc.send_vel_cmds_to_drone();
+
+        mpc_stop = std::chrono::steady_clock::now();
+        std::chrono::duration<double> mpc_time = mpc_stop - loop_start;
+
+        // Adjust sleep to maintain constant loop rate
+        sleep_time = loop_duration - mpc_time.count();
+        if (sleep_time > 0) {
+            ros::Duration(sleep_time).sleep();
+        } else {
+            ROS_WARN("Loop overran the desired rate!");
         }
-        else rate3.sleep();
-        ROS_INFO("Waiting for drone pose and command...\n");
+
+        loop_end = std::chrono::steady_clock::now();
+        std::chrono::duration<double> elapsed_time = loop_end - loop_start;
+        std::cout << "\nSending velocities every: " << elapsed_time.count() << "sec. <<<\n---\n";
+
     }
 
 
 return 0;
 
 }
+
 
 
 
