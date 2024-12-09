@@ -311,6 +311,7 @@ void drone_connection::startschuss_cb(const std_msgs::Bool::ConstPtr& msg) {
 }
 
 
+
 /////////////////////////////// CALLBACKS END ///////////////////////////////
 
 // to avoid angle wrap

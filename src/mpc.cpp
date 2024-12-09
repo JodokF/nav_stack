@@ -5,6 +5,7 @@
 #include <nav_msgs/Odometry.h>
 #include <chrono>
 #include <std_msgs/Bool.h>
+#include <tf/tf.h> // Include the necessary header
 
 
 // for the camera tf frame transformation:
@@ -22,6 +23,8 @@ class mpc{
         void poseCallback_geomtry_msg_pose(const geometry_msgs::PoseStamped::ConstPtr& msg);
         void vel_cmd_cb(const geometry_msgs::Twist::ConstPtr& msg);
         void pose_cmd_cb(const geometry_msgs::PoseStamped::ConstPtr& msg);
+        double get_yaw_difference(double, double);
+
 
         ros::Subscriber vel_cmd_sub;
         ros::Subscriber pose_cmd_sub;
@@ -129,6 +132,8 @@ mpc::~mpc()
     // To-Do
 }
 
+/////////////////////////////// CALLBACKS ///////////////////////////////
+
 void mpc::poseCallback_nav_msg_odom(const nav_msgs::Odometry::ConstPtr& msg){
     
     if(tracking_camera == false){
@@ -182,6 +187,8 @@ void mpc::vel_cmd_cb(const geometry_msgs::Twist::ConstPtr& msg){
     vel_cmd_received = true;
 }
 
+/////////////////////////////// CALLBACKS END ///////////////////////////////
+
 
 void mpc::model_predictive_control(){
 
@@ -193,7 +200,7 @@ void mpc::model_predictive_control(){
     x_init(0) = curr_pose.pose.position.x;
     x_init(1) = curr_pose.pose.position.y;
     x_init(2) = curr_pose.pose.position.z;
-    x_init(3) = 0.0; // I'll do this yaw shit later...
+    x_init(3) = tf::getYaw(curr_pose.pose.orientation);
 
     // std::cout << "Number of recived traj. wp.: " << traj_vec.size() << " <<<\n";
     
@@ -207,14 +214,14 @@ void mpc::model_predictive_control(){
         x_ref_value(0, 0) = traj_vec.at(k + mpc_iter_cntr).pose.position.x; 
         x_ref_value(1, 0) = traj_vec.at(k + mpc_iter_cntr).pose.position.y; 
         x_ref_value(2, 0) = traj_vec.at(k + mpc_iter_cntr).pose.position.z; 
-        x_ref_value(3, 0) = 0; // I'll do this yaw shit later...  
+        x_ref_value(3, 0) = tf::getYaw(traj_vec.at(k + mpc_iter_cntr).pose.orientation);
         opti.set_value(x_ref.at(k), x_ref_value); 
 
         // set initial guess for the velocity
         v_ref_value(0, 0) = vel_vec.at(k + mpc_iter_cntr).linear.x;
         v_ref_value(1, 0) = vel_vec.at(k + mpc_iter_cntr).linear.y;
         v_ref_value(2, 0) = vel_vec.at(k + mpc_iter_cntr).linear.z;
-        v_ref_value(3, 0) = 0; // I'll do this yaw shit later...  
+        v_ref_value(3, 0) = vel_vec.at(k + mpc_iter_cntr).angular.z;
         opti.set_initial(veloc.at(k), v_ref_value);
 
         // Enforce initial condition
@@ -223,8 +230,10 @@ void mpc::model_predictive_control(){
         // Define the dynamics: x_{k+1} = x_k + delta_t * v_k
         if (0 < k && k < pred_horz) opti.subject_to(x_prd.at(k) == x_prd.at(k - 1) + delta_t * veloc.at(k - 1));
 
-        traj_error = x_prd.at(k) - x_ref.at(k);
-
+        // calculating the error between reference and prediction:
+        traj_error = x_prd.at(k) - x_ref.at(k); 
+        // to avoid angle wrap:
+        traj_error(3, 0) = traj_error(3, 0) - 2 * M_PI * casadi::MX::floor((traj_error(3, 0) + M_PI) / (2 * M_PI));
         // calculating the quadratic sum of the errors or somthing like this
         // J(x) = Sum((x(k).T)*Q*x(k)+v(k)*R*v(k))
         stage_cost = mtimes(traj_error.T(), mtimes(Q, traj_error)) + mtimes(veloc.at(k).T(), mtimes(R, veloc.at(k)));
@@ -251,7 +260,7 @@ void mpc::model_predictive_control(){
     vel_cmd_send.linear.x = static_cast<double>(sol.value(veloc.at(0)(0, 0)));
     vel_cmd_send.linear.y = static_cast<double>(sol.value(veloc.at(0)(1, 0)));
     vel_cmd_send.linear.z = static_cast<double>(sol.value(veloc.at(0)(2, 0)));
-    vel_cmd_send.angular.z = 0; // static_cast<double>(sol.value(veloc.at(0)(3, 0)));
+    vel_cmd_send.angular.z = static_cast<double>(sol.value(veloc.at(0)(3, 0)));
     
     // std::cout << "\nValue send: " << vel_cmd_send << "\n---\n";
     
@@ -268,13 +277,13 @@ void mpc::model_predictive_control(){
  void mpc::send_vel_cmds_to_drone(){
 
 
-    std::cout << std::fixed << std::showpoint << std::setprecision(3);
+    /*std::cout << std::fixed << std::showpoint << std::setprecision(3);
     std::cout   << "Vel. send lin. & yaw: (" 
                 << vel_cmd_send.linear.x << ", "
                 << vel_cmd_send.linear.y << ", "
                 << vel_cmd_send.linear.z << ") & "
                 << vel_cmd_send.angular.z ;
-
+*/
 
     // if the calculatet velocity is under the vel_threshold -> publish it
     // if not -> change all velocities to zero and publish it
@@ -362,6 +371,8 @@ int main(int argc, char **argv)
             ros::Duration(sleep_time).sleep();
         } else {
             ROS_WARN("Loop overran the desired rate!");
+            std::cout << "MPC need time for calculation: " << mpc_time.count() << "sec. <<<\n---\n";
+
         }
 
         loop_end = std::chrono::steady_clock::now();
