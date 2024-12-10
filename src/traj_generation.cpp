@@ -293,6 +293,8 @@ bool traj_planner::generate_trajectory()
 
 void traj_planner::send_vel_commands() {
     
+    cmd_pose.header.stamp = ros::Time::now();
+    cmd_pose.header.frame_id = "map";
     if(curr_state + 1 <= traj_vec.size()){  // + 1 because if not it sends one 0 0 0 pose...
         
         /*

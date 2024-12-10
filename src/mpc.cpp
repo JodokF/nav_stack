@@ -23,8 +23,6 @@ class mpc{
         void poseCallback_geomtry_msg_pose(const geometry_msgs::PoseStamped::ConstPtr& msg);
         void vel_cmd_cb(const geometry_msgs::Twist::ConstPtr& msg);
         void pose_cmd_cb(const geometry_msgs::PoseStamped::ConstPtr& msg);
-        double get_yaw_difference(double, double);
-
 
         ros::Subscriber vel_cmd_sub;
         ros::Subscriber pose_cmd_sub;
@@ -34,7 +32,6 @@ class mpc{
 
         nav_msgs::Odometry curr_pose_sim;
         geometry_msgs::PoseStamped curr_pose, curr_pose_temp;
-        std::vector<geometry_msgs::PoseStamped> traj_vec;
         std::vector<geometry_msgs::Twist> vel_vec;
 
         geometry_msgs::Twist vel_cmd_in, vel_cmd_send;
@@ -66,13 +63,20 @@ class mpc{
         MX opti_func;
         MX stage_cost;
         MX traj_error;
-        Dict opts;
-        
+        Dict opts;    
 
     public:
         void model_predictive_control();
         void send_vel_cmds_to_drone();
         bool tracking_camera, vel_cmd_received, pose_cmd_received, drone_pose_received, vel_anomalie_detected;
+
+        ros::Publisher ground_truth_traj_pub;
+        std::vector<geometry_msgs::PoseStamped> traj_vec;
+        
+        // to construct the OptiSol object
+        // void initialize(OptiSol solva) {
+        //     sol_old = new OptiSol(std::move(solva));
+        // }
 
         mpc(ros::NodeHandle& nh);
         ~mpc();
@@ -80,11 +84,13 @@ class mpc{
 };
 
 mpc::mpc(ros::NodeHandle& nh)
-        : tf_listener(tf_buffer, nh) 
+        : tf_listener(tf_buffer, nh)
 {
 
     cmd_vel_unstmpd_pub = nh.advertise<geometry_msgs::Twist>
         ("/mavros/setpoint_velocity/cmd_vel_unstamped", 10);
+    ground_truth_traj_pub = nh.advertise<geometry_msgs::PoseStamped>
+        ("/ground_truth_traj", 10);
     vel_cmd_sub = nh.subscribe<geometry_msgs::Twist>
         ("/vel_cmd_2_drone", 10, &mpc::vel_cmd_cb, this);
     pose_cmd_sub = nh.subscribe<geometry_msgs::PoseStamped>
@@ -98,7 +104,7 @@ mpc::mpc(ros::NodeHandle& nh)
 
         
         /************************* MPC STUFF *************************/
-        delta_t = 0.2; 
+        delta_t = 0.2; // comes from traj_generation.cpp because of the sampling interval of the trajectory
         pred_horz = 5;
         x_ref_value = DM(4, 1);
         v_ref_value = DM(4, 1);
@@ -193,6 +199,7 @@ void mpc::vel_cmd_cb(const geometry_msgs::Twist::ConstPtr& msg){
 void mpc::model_predictive_control(){
 
     // initialize this hear so it gets cleared bevore every iteration...
+        
     Opti opti; 
     opti_func = MX(0);
 
@@ -203,6 +210,7 @@ void mpc::model_predictive_control(){
     x_init(3) = tf::getYaw(curr_pose.pose.orientation);
 
     // std::cout << "Number of recived traj. wp.: " << traj_vec.size() << " <<<\n";
+
     
     for (int k = 0; k < pred_horz; ++k) {
         
@@ -246,11 +254,13 @@ void mpc::model_predictive_control(){
 
     }
 
+
     opti.minimize(opti_func);
 
     opti.solver("ipopt", opts);
         
     OptiSol sol = opti.solve();
+
 
     //std::cout << std::fixed << std::showpoint << std::setprecision(3);
     //std::cout << "\n---\nThis is the fucking velocity: " << sol.value(veloc.at(0));
@@ -261,8 +271,7 @@ void mpc::model_predictive_control(){
     vel_cmd_send.linear.y = static_cast<double>(sol.value(veloc.at(0)(1, 0)));
     vel_cmd_send.linear.z = static_cast<double>(sol.value(veloc.at(0)(2, 0)));
     vel_cmd_send.angular.z = static_cast<double>(sol.value(veloc.at(0)(3, 0)));
-    
-    // std::cout << "\nValue send: " << vel_cmd_send << "\n---\n";
+
     
     // to cycle through the whole trajectory reference vector as the mpc continues 
     mpc_iter_cntr++;
@@ -271,7 +280,7 @@ void mpc::model_predictive_control(){
     x_prd.clear();
     veloc.clear();
     x_ref.clear();
-
+    
 }
 
  void mpc::send_vel_cmds_to_drone(){
@@ -346,17 +355,24 @@ int main(int argc, char **argv)
     ros::Duration(0.05).sleep(); // wait a sec for drone_connection.cpp to react...
 
 
-    double loop_duration = 0.025;  // Target loop duration (40 Hz)
+    double loop_duration = 0.0245;  // Target loop duration (40 Hz)
     double sleep_time = 0;
     int mpc_cntr = 0;
     std::chrono::_V2::steady_clock::time_point mpc_stop, loop_start, loop_end;
-
+    int cntr = 0;
     while (ros::ok()) {
         loop_start = std::chrono::steady_clock::now();
 
         // calculating the new velocities with 5 Hz
         // since it is generated in traj_genereation.cpp with 5 Hz
-        if (mpc_cntr % 8 == 0) mpc.model_predictive_control();
+        if (mpc_cntr % 8 == 0){ 
+            mpc.model_predictive_control();
+            // publish ground truth with stamp to compare it to the travelled path
+            mpc.traj_vec.at(cntr).header.stamp = ros::Time::now();
+            mpc.traj_vec.at(cntr).header.frame_id = "map";
+            mpc.ground_truth_traj_pub.publish(mpc.traj_vec.at(cntr));
+            cntr++;
+        } 
         mpc_cntr++;
         // sending the velocities with 40 Hz 
         // since the drone needs vel cmds with at least 20 Hz
@@ -371,13 +387,14 @@ int main(int argc, char **argv)
             ros::Duration(sleep_time).sleep();
         } else {
             ROS_WARN("Loop overran the desired rate!");
-            std::cout << "MPC need time for calculation: " << mpc_time.count() << "sec. <<<\n---\n";
+            std::cout << "MPC need time for calculation: " << mpc_time.count() << "sec. <<<";
 
         }
 
         loop_end = std::chrono::steady_clock::now();
         std::chrono::duration<double> elapsed_time = loop_end - loop_start;
-        std::cout << "\nSending velocities every: " << elapsed_time.count() << "sec. <<<\n---\n";
+        std::cout << "\nSending velocities every: " << elapsed_time.count() << "sec. \n---\n"; 
+
 
     }
 
